@@ -110,22 +110,3 @@ function MainContent() {
     </>
   );
 }
-
-export default function Home() {
-  const wallets = useMemo(
-    () => [new PhantomWalletAdapter(), new SolflareWalletAdapter()],
-    []
-  );
-
-  const endpoint = useMemo(() => clusterApiUrl("devnet"), []);
-
-  return (
-    <ConnectionProvider endpoint={endpoint}>
-      <WalletProvider wallets={wallets} autoConnect>
-        <WalletModalProvider>
-          <MainContent />
-        </WalletModalProvider>
-      </WalletProvider>
-    </ConnectionProvider>
-  );
-}

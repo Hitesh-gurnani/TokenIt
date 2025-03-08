@@ -12,9 +12,20 @@ import Link from "next/link";
 import { ThemeToggle } from "@/components/theme-toggler";
 import { Switch } from "@/components/ui/switch";
 import * as yup from "yup";
+import { Keypair, SystemProgram, Transaction } from "@solana/web3.js";
+import { useConnection, useWallet } from "@solana/wallet-adapter-react";
+import {
+  TOKEN_PROGRAM_ID,
+  MINT_SIZE,
+  getMinimumBalanceForRentExemptMint,
+  createInitializeMint2Instruction,
+} from "@solana/spl-token";
 
 function Launchpad() {
   const [previewImage, setPreviewImage] = useState<string | null>(null);
+  const { publicKey } = useWallet();
+  const wallet = useWallet();
+  const { connection } = useConnection();
 
   //   const validationSchema = yup.object().shape({
   //     name: yup
@@ -63,7 +74,50 @@ function Launchpad() {
               revokeMintAuthority: false,
             }}
             // validationSchema={validationSchema}
-            onSubmit={(values) => {}}
+            onSubmit={async (values) => {
+              if (!publicKey) return;
+              const mintKeypair = Keypair.generate();
+              const lamport = await getMinimumBalanceForRentExemptMint(
+                connection
+              );
+              const transaction = new Transaction().add(
+                SystemProgram.createAccount({
+                  fromPubkey: publicKey,
+                  newAccountPubkey: mintKeypair.publicKey,
+                  lamports: lamport,
+                  space: MINT_SIZE,
+                  programId: TOKEN_PROGRAM_ID,
+                }),
+                createInitializeMint2Instruction(
+                  mintKeypair.publicKey,
+                  Number(values.decimals),
+                  publicKey,
+                  publicKey,
+                  TOKEN_PROGRAM_ID
+                )
+              );
+              const recentBlockhash = await connection.getLatestBlockhash();
+              transaction.recentBlockhash = recentBlockhash.blockhash;
+              // @ts-ignore
+              transaction.feePayer = wallet.publicKey;
+
+              transaction.partialSign(mintKeypair);
+
+              console.log("Sending transaction to wallet for approval...");
+              const signature = await wallet.sendTransaction(
+                transaction,
+                connection
+              );
+              console.log("Transaction sent, signature:", signature);
+
+              const confirmation = await connection.confirmTransaction(
+                signature,
+                "confirmed"
+              );
+              console.log(
+                `Token created successfully! Mint address: ${mintKeypair.publicKey}`
+              );
+            }}
           >
             {({ setFieldValue, values }) => (
               <Form className="grid grid-cols-1 md:grid-cols-2 gap-8 w-full">
