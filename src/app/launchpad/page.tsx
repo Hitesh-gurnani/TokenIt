@@ -11,6 +11,7 @@ import { Card } from "@/components/ui/card";
 import Link from "next/link";
 import { ThemeToggle } from "@/components/theme-toggler";
 import { Switch } from "@/components/ui/switch";
+import axios from "axios";
 import * as yup from "yup";
 import {
   Keypair,
@@ -29,6 +30,8 @@ import { createCreateMetadataAccountV3Instruction } from "@metaplex-foundation/m
 
 function Launchpad() {
   const [previewImage, setPreviewImage] = useState<string | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
+  const [metadataUri, setMetadataUri] = useState<string | null>(null);
   const { publicKey } = useWallet();
   const wallet = useWallet();
   const { connection } = useConnection();
@@ -53,6 +56,55 @@ function Launchpad() {
   const TOKEN_METADATA_PROGRAM_ID = new PublicKey(
     "metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s"
   );
+
+  const uploadToIPFS = async (imageFile: File, metadata: any) => {
+    setIsUploading(true);
+    try {
+      const imageFormData = new FormData();
+      imageFormData.append("file", imageFile);
+
+      const pinataHeaders = {
+        pinata_api_key: process.env.NEXT_PUBLIC_PINATA_API_KEY || "",
+        pinata_secret_api_key: process.env.NEXT_PUBLIC_PINATA_SECRET_KEY || "",
+      };
+
+      const imageResponse = await axios.post(
+        "https://api.pinata.cloud/pinning/pinFileToIPFS",
+        imageFormData,
+        { headers: { ...pinataHeaders, "Content-Type": "multipart/form-data" } }
+      );
+
+      const imageIPFSHash = imageResponse.data.IpfsHash;
+      console.log(imageIPFSHash);
+      const imageUri = `https://gateway.pinata.cloud/ipfs/${imageIPFSHash}`;
+
+      const metadataJSON = {
+        name: metadata.name,
+        symbol: metadata.symbol,
+        description: metadata.description,
+        image: imageUri,
+        attributes: [],
+      };
+
+      // Upload the metadata JSON
+      const metadataResponse = await axios.post(
+        "https://api.pinata.cloud/pinning/pinJSONToIPFS",
+        metadataJSON,
+        { headers: pinataHeaders }
+      );
+
+      const metadataIPFSHash = metadataResponse.data.IpfsHash;
+      const metadataIPFSUri = `ipfs://${metadataIPFSHash}`;
+
+      setMetadataUri(metadataIPFSUri);
+      return metadataIPFSUri;
+    } catch (error) {
+      console.error("Error uploading to IPFS:", error);
+      throw error;
+    } finally {
+      setIsUploading(false);
+    }
+  };
 
   return (
     <>
@@ -87,6 +139,14 @@ function Launchpad() {
             onSubmit={async (values) => {
               if (!publicKey) return;
               try {
+                const ipfsUri = values.image
+                  ? await uploadToIPFS(values.image as unknown as File, {
+                      name: values.name,
+                      symbol: values.symbol,
+                      description: values.description,
+                    })
+                  : "";
+
                 const mintKeypair = Keypair.generate();
                 const lamport = await getMinimumBalanceForRentExemptMint(
                   connection
@@ -111,7 +171,7 @@ function Launchpad() {
                 const metadataData = {
                   name: values.name,
                   symbol: values.symbol,
-                  uri: "",
+                  uri: ipfsUri,
                   sellerFeeBasisPoints: 0,
                   creators: null,
                   collection: null,
@@ -372,8 +432,9 @@ function Launchpad() {
                   <Button
                     type="submit"
                     className="w-full py-6 text-lg font-medium mt-4 bg-gradient-to-r from-primary to-primary/90 hover:opacity-90"
+                    disabled={isUploading}
                   >
-                    Create Token
+                    {isUploading ? "Uploading to IPFS..." : "Create Token"}
                   </Button>
                 </div>
               </Form>
