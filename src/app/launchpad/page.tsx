@@ -12,7 +12,12 @@ import Link from "next/link";
 import { ThemeToggle } from "@/components/theme-toggler";
 import { Switch } from "@/components/ui/switch";
 import * as yup from "yup";
-import { Keypair, SystemProgram, Transaction } from "@solana/web3.js";
+import {
+  Keypair,
+  SystemProgram,
+  Transaction,
+  PublicKey,
+} from "@solana/web3.js";
 import { useConnection, useWallet } from "@solana/wallet-adapter-react";
 import {
   TOKEN_PROGRAM_ID,
@@ -20,6 +25,7 @@ import {
   getMinimumBalanceForRentExemptMint,
   createInitializeMint2Instruction,
 } from "@solana/spl-token";
+import { createCreateMetadataAccountV3Instruction } from "@metaplex-foundation/mpl-token-metadata";
 
 function Launchpad() {
   const [previewImage, setPreviewImage] = useState<string | null>(null);
@@ -27,22 +33,26 @@ function Launchpad() {
   const wallet = useWallet();
   const { connection } = useConnection();
 
-  //   const validationSchema = yup.object().shape({
-  //     name: yup
-  //       .string()
-  //       .required("Name is required")
-  //       .min(3, "Name must be at least 3 characters"),
-  //     tokenSymbol: yup.string().required("Sym is required"),
-  //     supply: yup
-  //       .number()
-  //       .required("Supply is required")
-  //       .min(1, "Supply must be greater than 0"),
-  //     decimals: yup
-  //       .number()
-  //       .required("Decimals is required")
-  //       .min(1, "Decimals must be greater than 0"),
-  //     image: yup.string().required("Image is required"),
-  //   });
+  // const validationSchema = yup.object().shape({
+  //   name: yup
+  //     .string()
+  //     .required("Name is required")
+  //     .min(3, "Name must be at least 3 characters"),
+  //   tokenSymbol: yup.string().required("Sym is required"),
+  //   supply: yup
+  //     .number()
+  //     .required("Supply is required")
+  //     .min(1, "Supply must be greater than 0"),
+  //   decimals: yup
+  //     .number()
+  //     .required("Decimals is required")
+  //     .min(1, "Decimals must be greater than 0"),
+  //   image: yup.string().required("Image is required"),
+  // });
+
+  const TOKEN_METADATA_PROGRAM_ID = new PublicKey(
+    "metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s"
+  );
 
   return (
     <>
@@ -76,47 +86,92 @@ function Launchpad() {
             // validationSchema={validationSchema}
             onSubmit={async (values) => {
               if (!publicKey) return;
-              const mintKeypair = Keypair.generate();
-              const lamport = await getMinimumBalanceForRentExemptMint(
-                connection
-              );
-              const transaction = new Transaction().add(
-                SystemProgram.createAccount({
-                  fromPubkey: publicKey,
-                  newAccountPubkey: mintKeypair.publicKey,
-                  lamports: lamport,
-                  space: MINT_SIZE,
-                  programId: TOKEN_PROGRAM_ID,
-                }),
-                createInitializeMint2Instruction(
-                  mintKeypair.publicKey,
-                  Number(values.decimals),
-                  publicKey,
-                  publicKey,
-                  TOKEN_PROGRAM_ID
-                )
-              );
-              const recentBlockhash = await connection.getLatestBlockhash();
-              transaction.recentBlockhash = recentBlockhash.blockhash;
-              // @ts-ignore
-              transaction.feePayer = wallet.publicKey;
+              try {
+                const mintKeypair = Keypair.generate();
+                const lamport = await getMinimumBalanceForRentExemptMint(
+                  connection
+                );
+                const transaction = new Transaction().add(
+                  SystemProgram.createAccount({
+                    fromPubkey: publicKey,
+                    newAccountPubkey: mintKeypair.publicKey,
+                    lamports: lamport,
+                    space: MINT_SIZE,
+                    programId: TOKEN_PROGRAM_ID,
+                  }),
+                  createInitializeMint2Instruction(
+                    mintKeypair.publicKey,
+                    Number(values.decimals),
+                    publicKey,
+                    publicKey,
+                    TOKEN_PROGRAM_ID
+                  )
+                );
 
-              transaction.partialSign(mintKeypair);
+                const metadataData = {
+                  name: values.name,
+                  symbol: values.symbol,
+                  uri: "",
+                  sellerFeeBasisPoints: 0,
+                  creators: null,
+                  collection: null,
+                  uses: null,
+                };
+                console.log(metadataData);
 
-              console.log("Sending transaction to wallet for approval...");
-              const signature = await wallet.sendTransaction(
-                transaction,
-                connection
-              );
-              console.log("Transaction sent, signature:", signature);
+                const metadataPDAAndBump = PublicKey.findProgramAddressSync(
+                  [
+                    Buffer.from("metadata"),
+                    TOKEN_METADATA_PROGRAM_ID.toBuffer(),
+                    mintKeypair.publicKey.toBuffer(),
+                  ],
+                  TOKEN_METADATA_PROGRAM_ID
+                );
 
-              const confirmation = await connection.confirmTransaction(
-                signature,
-                "confirmed"
-              );
-              console.log(
-                `Token created successfully! Mint address: ${mintKeypair.publicKey}`
-              );
+                const metadataPDA = metadataPDAAndBump[0];
+                const createMetadataInstruction =
+                  createCreateMetadataAccountV3Instruction(
+                    {
+                      metadata: metadataPDA,
+                      mint: mintKeypair.publicKey,
+                      mintAuthority: publicKey,
+                      payer: publicKey,
+                      updateAuthority: publicKey,
+                    },
+                    {
+                      createMetadataAccountArgsV3: {
+                        data: metadataData,
+                        isMutable: true,
+                        collectionDetails: null,
+                      },
+                    }
+                  );
+
+                transaction.add(createMetadataInstruction);
+                const recentBlockhash = await connection.getLatestBlockhash();
+                transaction.recentBlockhash = recentBlockhash.blockhash;
+                // @ts-ignore
+                transaction.feePayer = wallet.publicKey;
+
+                transaction.partialSign(mintKeypair);
+
+                console.log("Sending transaction to wallet for approval...");
+                const signature = await wallet.sendTransaction(
+                  transaction,
+                  connection
+                );
+                console.log("Transaction sent, signature:", signature);
+
+                const confirmation = await connection.confirmTransaction(
+                  signature,
+                  "confirmed"
+                );
+                console.log(
+                  `Token created successfully! Mint address: ${mintKeypair.publicKey}`
+                );
+              } catch (error) {
+                console.error("Error creating token:", error);
+              }
             }}
           >
             {({ setFieldValue, values }) => (

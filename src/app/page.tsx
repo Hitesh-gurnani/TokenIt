@@ -4,24 +4,10 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { useRouter } from "next/navigation";
 import { ThemeToggle } from "@/components/theme-toggler";
-import {
-  ConnectionProvider,
-  WalletProvider,
-  useWallet,
-} from "@solana/wallet-adapter-react";
-import {
-  WalletModalProvider,
-  useWalletModal,
-} from "@solana/wallet-adapter-react-ui";
+import { useWallet } from "@solana/wallet-adapter-react";
+import { useWalletModal } from "@solana/wallet-adapter-react-ui";
 import { WalletMultiButton } from "@solana/wallet-adapter-react-ui";
 import "@solana/wallet-adapter-react-ui/styles.css";
-
-import {
-  PhantomWalletAdapter,
-  SolflareWalletAdapter,
-} from "@solana/wallet-adapter-wallets";
-import { useMemo } from "react";
-import { clusterApiUrl } from "@solana/web3.js";
 import { motion } from "framer-motion";
 
 function MainContent() {
@@ -110,3 +96,5 @@ function MainContent() {
     </>
   );
 }
+
+export default MainContent;
