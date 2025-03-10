@@ -27,11 +27,14 @@ import {
   createInitializeMint2Instruction,
 } from "@solana/spl-token";
 import { createCreateMetadataAccountV3Instruction } from "@metaplex-foundation/mpl-token-metadata";
+import { Toaster, toast } from "sonner";
 
 function Launchpad() {
   const [previewImage, setPreviewImage] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [metadataUri, setMetadataUri] = useState<string | null>(null);
+  const [mintAddress, setMintAddress] = useState<string | null>(null);
+  const [isSuccess, setIsSuccess] = useState(false);
   const { publicKey } = useWallet();
   const wallet = useWallet();
   const { connection } = useConnection();
@@ -108,6 +111,8 @@ function Launchpad() {
 
   return (
     <>
+      <Toaster position="top-right" />
+
       <header className="flex justify-between items-center p-4 max-w-screen-lg mx-auto">
         <Link href="/" className="text-xl font-bold">
           TokenIt
@@ -226,11 +231,34 @@ function Launchpad() {
                   signature,
                   "confirmed"
                 );
+
+                setMintAddress(mintKeypair.publicKey.toString());
+                setIsSuccess(true);
+
+                toast.success("Token created successfully!", {
+                  description: "Your token has been created on Solana.",
+                  action: {
+                    label: "View on Explorer",
+                    onClick: () =>
+                      window.open(
+                        `https://explorer.solana.com/address/${mintKeypair.publicKey.toString()}?cluster=devnet`,
+                        "_blank"
+                      ),
+                  },
+                  duration: 5000,
+                });
+
                 console.log(
                   `Token created successfully! Mint address: ${mintKeypair.publicKey}`
                 );
               } catch (error) {
                 console.error("Error creating token:", error);
+                // Show error toast using Sonner
+                toast.error("Error creating token", {
+                  description:
+                    "There was an error creating your token. Please try again.",
+                  duration: 5000,
+                });
               }
             }}
           >
@@ -442,6 +470,54 @@ function Launchpad() {
           </Formik>
         </div>
       </div>
+
+      {/* Add the success section that shows after token creation */}
+      {isSuccess && mintAddress && (
+        <div className="mt-8 p-6 border border-green-500 rounded-xl bg-green-50 dark:bg-green-900/20">
+          <h3 className="text-xl font-bold text-green-700 dark:text-green-400 mb-2">
+            Token Created Successfully!
+          </h3>
+          <p className="mb-4">
+            Your token has been created on the Solana blockchain.
+          </p>
+          <div className="flex flex-col sm:flex-row gap-4">
+            <a
+              href={`https://explorer.solana.com/address/${mintAddress}?cluster=devnet`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center justify-center gap-2 bg-primary text-white px-4 py-2 rounded-lg hover:opacity-90"
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
+                <polyline points="15 3 21 3 21 9"></polyline>
+                <line x1="10" y1="14" x2="21" y2="3"></line>
+              </svg>
+              View on Solana Explorer
+            </a>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                setIsSuccess(false);
+                setMintAddress(null);
+                setPreviewImage(null);
+              }}
+            >
+              Create Another Token
+            </Button>
+          </div>
+        </div>
+      )}
     </>
   );
 }
